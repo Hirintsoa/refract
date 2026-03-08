@@ -1,6 +1,7 @@
 const std = @import("std");
 const db_mod = @import("../db.zig");
 const prism = @import("../prism.zig");
+const i18n_mod = @import("i18n.zig");
 
 const SemToken = struct {
     line: u32,
@@ -644,6 +645,24 @@ fn extractNewCallType(parser: *prism.Parser, node: ?*const prism.Node) ?[]const 
         if (cp.name != 0) return resolveConstant(parser, cp.name);
     }
     return null;
+}
+
+fn editDistance(a: []const u8, b: []const u8) u32 {
+    if (a.len > 64 or b.len > 64) return 99;
+    if (a.len == 0) return @intCast(b.len);
+    if (b.len == 0) return @intCast(a.len);
+    var prev: [65]u32 = undefined;
+    var curr: [65]u32 = undefined;
+    for (0..b.len + 1) |j| prev[j] = @intCast(j);
+    for (a, 0..) |ca, i| {
+        curr[0] = @intCast(i + 1);
+        for (b, 0..) |cb, j| {
+            const cost: u32 = if (ca == cb) 0 else 1;
+            curr[j + 1] = @min(@min(curr[j] + 1, prev[j + 1] + 1), prev[j] + cost);
+        }
+        @memcpy(prev[0..b.len + 1], curr[0..b.len + 1]);
+    }
+    return prev[b.len];
 }
 
 fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
@@ -2758,6 +2777,101 @@ fn extractErbRuby(alloc: std.mem.Allocator, source: []const u8) ![]u8 {
     return buf;
 }
 
+pub fn runSemanticChecks(db: db_mod.Db, file_id: i64, alloc: std.mem.Allocator) !std.ArrayList(DiagEntry) {
+    var diags = std.ArrayList(DiagEntry){};
+
+    // Unused local variable detection: local_vars not referenced in refs within same file
+    // Skip names starting with _ (convention for intentionally unused)
+    const unused_stmt = db.prepare(
+        \\SELECT lv.name, lv.line, lv.col FROM local_vars lv
+        \\WHERE lv.file_id = ? AND lv.name NOT LIKE '\_%' ESCAPE '\'
+        \\AND NOT EXISTS (
+        \\  SELECT 1 FROM refs r WHERE r.file_id = lv.file_id AND r.name = lv.name
+        \\)
+    ) catch return diags;
+    defer unused_stmt.finalize();
+    unused_stmt.bind_int(1, file_id);
+
+    while (unused_stmt.step() catch false) {
+        const var_name = unused_stmt.column_text(0);
+        const line = unused_stmt.column_int(1);
+        const col = unused_stmt.column_int(2);
+
+        const msg = std.fmt.allocPrint(alloc, "unused local variable '{s}'", .{var_name}) catch continue;
+        diags.append(alloc, .{
+            .line = @intCast(line),
+            .col = @intCast(col),
+            .message = msg,
+            .severity = 2,
+            .code = "refract/unused-variable",
+        }) catch {
+            alloc.free(msg);
+        };
+    }
+
+    // Undefined method with fuzzy "did you mean?" suggestions
+    // Check refs that look like method calls against known symbols
+    const ref_stmt = db.prepare(
+        \\SELECT r.name, r.line, r.col FROM refs r
+        \\WHERE r.file_id = ? AND r.name NOT LIKE '\_%' ESCAPE '\'
+        \\AND NOT EXISTS (
+        \\  SELECT 1 FROM symbols s WHERE s.name = r.name
+        \\)
+        \\AND NOT EXISTS (
+        \\  SELECT 1 FROM local_vars lv WHERE lv.file_id = r.file_id AND lv.name = r.name
+        \\)
+    ) catch return diags;
+    defer ref_stmt.finalize();
+    ref_stmt.bind_int(1, file_id);
+
+    while (ref_stmt.step() catch false) {
+        const ref_name = ref_stmt.column_text(0);
+        const line = ref_stmt.column_int(1);
+        const col = ref_stmt.column_int(2);
+
+        // Skip common Ruby built-ins and keywords
+        if (ref_name.len == 0) continue;
+        if (ref_name[0] >= 'A' and ref_name[0] <= 'Z') continue; // constants handled elsewhere
+
+        // Find similar symbol names for "did you mean?" suggestions
+        const similar = db.prepare(
+            \\SELECT DISTINCT name FROM symbols
+            \\WHERE kind IN ('def','classdef') AND name LIKE ? ESCAPE '\'
+            \\LIMIT 10
+        ) catch continue;
+        defer similar.finalize();
+        var like_buf: [256]u8 = undefined;
+        const like_pat = std.fmt.bufPrint(&like_buf, "%{s}%", .{ref_name}) catch continue;
+        similar.bind_text(1, like_pat);
+
+        var best_name: ?[]const u8 = null;
+        var best_dist: u32 = 3;
+        while (similar.step() catch false) {
+            const candidate = similar.column_text(0);
+            const dist = editDistance(ref_name, candidate);
+            if (dist > 0 and dist < best_dist) {
+                best_dist = dist;
+                best_name = candidate;
+            }
+        }
+
+        if (best_name) |suggested| {
+            const msg = std.fmt.allocPrint(alloc, "undefined method '{s}' \u{2014} did you mean '{s}'?", .{ ref_name, suggested }) catch continue;
+            diags.append(alloc, .{
+                .line = @intCast(line),
+                .col = @intCast(col),
+                .message = msg,
+                .severity = 2,
+                .code = "refract/undefined-method",
+            }) catch {
+                alloc.free(msg);
+            };
+        }
+    }
+
+    return diags;
+}
+
 pub fn reindex(db: db_mod.Db, paths: []const []const u8, is_gem: bool, alloc: std.mem.Allocator, max_file_size: usize) !void {
     try db.begin();
     var committed = false;
@@ -2841,6 +2955,12 @@ pub fn reindex(db: db_mod.Db, paths: []const []const u8, is_gem: bool, alloc: st
         // RBS: parse type signatures directly, skip Prism
         if (std.mem.endsWith(u8, path, ".rbs")) {
             try indexRbs(db, file_id, source[0 .. source.len - 1]);
+            continue;
+        }
+
+        if (std.mem.containsAtLeast(u8, path, 1, "locales/") and
+            (std.mem.endsWith(u8, path, ".yml") or std.mem.endsWith(u8, path, ".yaml"))) {
+            i18n_mod.indexLocaleFile(db, file_id, source[0 .. source.len - 1]);
             continue;
         }
 
