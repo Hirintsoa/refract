@@ -11,7 +11,7 @@ Thank you for your interest in contributing to Refract! This guide will help you
 ### Build from Source
 
 ```bash
-git clone https://github.com/fedhtrsx/refract.git
+git clone https://github.com/Hirintsoa/refract.git
 cd refract
 zig build
 ```

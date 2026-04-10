@@ -10,7 +10,7 @@ Download the latest binary:
 OS=$(uname -s); ARCH=$(uname -m)
 case "$OS" in Darwin) OS=macos ;; *) OS=linux ;; esac
 case "$ARCH" in arm64) ARCH=aarch64 ;; esac
-curl -L "https://github.com/fedhtrsx/refract/releases/latest/download/refract-${ARCH}-${OS}" \
+curl -L "https://github.com/Hirintsoa/refract/releases/latest/download/refract-${ARCH}-${OS}" \
   -o ~/.local/bin/refract && chmod +x ~/.local/bin/refract
 ```
 
@@ -39,7 +39,7 @@ refract --stats                # print file and symbol counts and exit
 Requires Zig 0.15.2+.
 
 ```sh
-git clone --recurse-submodules https://github.com/fedhtrsx/refract
+git clone --recurse-submodules https://github.com/Hirintsoa/refract
 cd refract
 zig build --release=safe
 # binary at zig-out/bin/refract
@@ -362,7 +362,7 @@ If you see "resetting DB (schema newer than binary)", the database was auto-rese
 This is normal after a downgrade. To manually upgrade refract:
 
 ```sh
-curl -L "https://github.com/fedhtrsx/refract/releases/latest/download/refract-$(uname -m | sed 's/arm64/aarch64/')-$(uname -s | sed 's/Darwin/macos/')" \
+curl -L "https://github.com/Hirintsoa/refract/releases/latest/download/refract-$(uname -m | sed 's/arm64/aarch64/')-$(uname -s | sed 's/Darwin/macos/')" \
   -o ~/.local/bin/refract && chmod +x ~/.local/bin/refract
 ```
 
