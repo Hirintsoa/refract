@@ -101,11 +101,9 @@ pub const Session = struct {
 
         timeout_done.store(true, .release);
         if (thr) |t| t.join();
-        var wstatus: u32 = 0;
-        const raw_rc = std.os.linux.waitpid(child.id, &wstatus, 0);
-        const wait_errno = std.posix.errno(raw_rc);
-        if (wait_errno != .SUCCESS and wait_errno != .CHILD) {
-            std.debug.print("refract waitpid errno: {}\n", .{wait_errno});
+        if (comptime @import("builtin").os.tag == .linux) {
+            var wstatus: u32 = 0;
+            _ = std.os.linux.waitpid(child.id, &wstatus, 0);
         }
         if (stderr_content.len > 0) {
             std.debug.print("refract stderr:\n{s}\n", .{stderr_content});
