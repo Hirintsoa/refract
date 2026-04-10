@@ -143,9 +143,13 @@ const TOOLS = [_]ToolEntry{
     .{ .name = "find_similar", .description = "Find methods with similar names (typo detection, naming consistency)", .schema = schema_find_similar },
 };
 
+const MAX_REQUESTS_PER_SEC: u32 = 100;
+
 pub const Server = struct {
     db: db_mod.Db,
     alloc: std.mem.Allocator,
+    request_count: u32 = 0,
+    request_window_ms: i64 = 0,
 
     pub fn init(db: db_mod.Db, alloc: std.mem.Allocator) Server {
         return .{ .db = db, .alloc = alloc };
@@ -175,6 +179,25 @@ pub const Server = struct {
             };
             const id = obj.get("id");
             const params = obj.get("params");
+
+            const now_ms = std.time.milliTimestamp();
+            if (now_ms - self.request_window_ms > 1000) {
+                self.request_count = 0;
+                self.request_window_ms = now_ms;
+            }
+            self.request_count += 1;
+            if (self.request_count > MAX_REQUESTS_PER_SEC) {
+                if (id != null) {
+                    const rl_resp = self.buildError(id, -32600, "rate limit exceeded") catch null;
+                    if (rl_resp) |resp| {
+                        defer self.alloc.free(resp);
+                        writer.writeAll(resp) catch break;
+                        writer.writeByte('\n') catch break;
+                        writer.flush() catch break;
+                    }
+                }
+                continue;
+            }
 
             const resp_opt = self.dispatch(method, id, params) catch |e| blk: {
                 if (id == null) break :blk null;
@@ -2740,6 +2763,8 @@ pub const Server = struct {
             defer stmt.finalize();
 
             var first = true;
+            var result_count: u32 = 0;
+            const max_results: u32 = 500;
             while (stmt.step() catch |e| stepLog(e)) {
                 const line = stmt.column_int(0);
                 const col = stmt.column_int(1);
@@ -2764,6 +2789,8 @@ pub const Server = struct {
                     if (!std.mem.eql(u8, code, cf)) continue;
                 }
 
+                if (result_count >= max_results) break;
+
                 if (!first) try w.writeByte(',');
                 first = false;
                 try w.print("{{\"file\":", .{});
@@ -2773,6 +2800,7 @@ pub const Server = struct {
                 try w.writeAll(",\"code\":");
                 if (code.len > 0) try writeJsonStr(w, code) else try w.writeAll("null");
                 try w.writeAll("}");
+                result_count += 1;
             }
         } else |_| {}
 

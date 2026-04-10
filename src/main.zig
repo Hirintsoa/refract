@@ -124,6 +124,7 @@ pub fn main() !void {
             var wbuf: [256]u8 = undefined;
             const wmsg = std.fmt.bufPrint(&wbuf, "refract: unrecognized flag: {s}\n", .{arg}) catch "refract: unrecognized flag\n";
             try std.fs.File.stderr().writeAll(wmsg);
+            return error.InvalidArgument;
         }
     }
 
@@ -476,7 +477,10 @@ pub fn main() !void {
         try std.fs.File.stderr().writeAll("refract: failed to open database\n");
         return error.DatabaseOpen;
     };
-    defer db.close();
+    defer {
+        db.checkpoint();
+        db.close();
+    }
     try db.init_schema();
     db.check_integrity() catch {
         try std.fs.File.stderr().writeAll("refract: database is corrupted (PRAGMA quick_check failed)\n");

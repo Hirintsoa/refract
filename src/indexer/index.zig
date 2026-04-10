@@ -494,26 +494,26 @@ fn insertBlockParams(ctx: *VisitCtx, block: *const prism.BlockNode, receiver_typ
         const pname = resolveConstant(ctx.parser, p.name);
         const lc = locationLineCol(ctx.parser, p.base.location.start);
         if (std.mem.eql(u8, method_name, "inject") or std.mem.eql(u8, method_name, "reduce")) {
-            insertLocalVar(ctx.db, ctx.file_id, pname, lc.line, lc.col, elem_type, 60, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, pname, lc.line, lc.col, elem_type, 60, ctx.scope_id) catch { ctx.error_count += 1; };
             if (params_list.requireds.size > 1) {
                 const p2: *const prism.RequiredParamNode = @ptrCast(@alignCast(params_list.requireds.nodes[1]));
                 const pname2 = resolveConstant(ctx.parser, p2.name);
                 const lc2 = locationLineCol(ctx.parser, p2.base.location.start);
-                insertLocalVar(ctx.db, ctx.file_id, pname2, lc2.line, lc2.col, elem_type, 60, ctx.scope_id) catch {};
+                insertLocalVar(ctx.db, ctx.file_id, pname2, lc2.line, lc2.col, elem_type, 60, ctx.scope_id) catch { ctx.error_count += 1; };
             }
         } else if (std.mem.eql(u8, method_name, "each_with_object") and params_list.requireds.size > 1) {
-            insertLocalVar(ctx.db, ctx.file_id, pname, lc.line, lc.col, elem_type, 60, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, pname, lc.line, lc.col, elem_type, 60, ctx.scope_id) catch { ctx.error_count += 1; };
             const p2: *const prism.RequiredParamNode = @ptrCast(@alignCast(params_list.requireds.nodes[1]));
             const pname2 = resolveConstant(ctx.parser, p2.name);
             const lc2 = locationLineCol(ctx.parser, p2.base.location.start);
-            insertLocalVar(ctx.db, ctx.file_id, pname2, lc2.line, lc2.col, accum_type orelse "Object", 60, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, pname2, lc2.line, lc2.col, accum_type orelse "Object", 60, ctx.scope_id) catch { ctx.error_count += 1; };
         } else {
-            insertLocalVar(ctx.db, ctx.file_id, pname, lc.line, lc.col, elem_type, 60, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, pname, lc.line, lc.col, elem_type, 60, ctx.scope_id) catch { ctx.error_count += 1; };
             if (std.mem.eql(u8, method_name, "each_with_index") and params_list.requireds.size > 1) {
                 const p2: *const prism.RequiredParamNode = @ptrCast(@alignCast(params_list.requireds.nodes[1]));
                 const pname2 = resolveConstant(ctx.parser, p2.name);
                 const lc2 = locationLineCol(ctx.parser, p2.base.location.start);
-                insertLocalVar(ctx.db, ctx.file_id, pname2, lc2.line, lc2.col, "Integer", 60, ctx.scope_id) catch {};
+                insertLocalVar(ctx.db, ctx.file_id, pname2, lc2.line, lc2.col, "Integer", 60, ctx.scope_id) catch { ctx.error_count += 1; };
             }
         }
     }
@@ -682,7 +682,7 @@ fn insertEnumSymbols(ctx: *VisitCtx, cn: *const prism.CallNode) !void {
             const lc = locationLineCol(ctx.parser, assoc.key.*.location.start);
             try insertSymbol(ctx, "def", ksym.unescaped.source[0..ksym.unescaped.length], lc.line, lc.col, null);
             // Index values from this key's array/hash
-            insertEnumValues(ctx, assoc.value) catch {};
+            insertEnumValues(ctx, assoc.value) catch { ctx.error_count += 1; };
         }
         return; // values already handled per-key above
     }
@@ -999,7 +999,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             }
             addSemToken(ctx, lc.line, lc.col, @intCast(name.len), 2);
             if (sym_id > 0 and dn.parameters != null) {
-                extractParams(ctx, sym_id, dn.parameters.?) catch {};
+                extractParams(ctx, sym_id, dn.parameters.?) catch { ctx.error_count += 1; };
                 // YARD @param annotations
                 if (doc) |d| {
                     const params_node: *const prism.ParametersNode = @ptrCast(@alignCast(dn.parameters.?));
@@ -1016,7 +1016,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                     u.bind_text(1, yard_type);
                                     u.bind_int(2, sym_id);
                                     u.bind_int(3, @intCast(position));
-                                    _ = u.step() catch {};
+                                    _ = u.step() catch { ctx.error_count += 1; };
                                 } else |_| {}
                             }
                         }
@@ -1034,7 +1034,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                     u.bind_text(1, yard_type);
                                     u.bind_int(2, sym_id);
                                     u.bind_int(3, @intCast(position));
-                                    _ = u.step() catch {};
+                                    _ = u.step() catch { ctx.error_count += 1; };
                                 } else |_| {}
                             }
                         }
@@ -1051,7 +1051,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                             defer u.finalize();
                             u.bind_text(1, yard_ret);
                             u.bind_int(2, sym_id);
-                            _ = u.step() catch {};
+                            _ = u.step() catch { ctx.error_count += 1; };
                         } else |_| {}
                     }
                 }
@@ -1071,7 +1071,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                     defer u.finalize();
                                     u.bind_text(1, type_str);
                                     u.bind_int(2, sym_id);
-                                    _ = u.step() catch {};
+                                    _ = u.step() catch { ctx.error_count += 1; };
                                 } else |_| {}
                             }
                         }
@@ -1085,16 +1085,16 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                     if (stmts.body.size > 0) {
                         const last_node = stmts.body.nodes[stmts.body.size - 1];
                         if (inferLiteralType(last_node)) |rt| {
-                            updateSymbolReturnType(ctx.db, sym_id, rt) catch {};
+                            updateSymbolReturnType(ctx.db, sym_id, rt) catch { ctx.error_count += 1; };
                         } else if (extractNewCallType(ctx.parser, last_node)) |rt| {
-                            updateSymbolReturnType(ctx.db, sym_id, rt) catch {};
+                            updateSymbolReturnType(ctx.db, sym_id, rt) catch { ctx.error_count += 1; };
                         } else if (last_node.*.type == prism.NODE_RETURN) {
                             const rn: *const prism.ReturnNode = @ptrCast(@alignCast(last_node));
                             if (rn.arguments != null) {
                                 const rargs = rn.arguments.?[0].arguments;
                                 if (rargs.size > 0) {
                                     if (extractNewCallType(ctx.parser, rargs.nodes[0])) |rt| {
-                                        updateSymbolReturnType(ctx.db, sym_id, rt) catch {};
+                                        updateSymbolReturnType(ctx.db, sym_id, rt) catch { ctx.error_count += 1; };
                                     }
                                 }
                             }
@@ -1103,9 +1103,9 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 } else {
                     // Endless method: def foo = expr — body is the expression directly
                     if (inferLiteralType(body)) |rt| {
-                        updateSymbolReturnType(ctx.db, sym_id, rt) catch {};
+                        updateSymbolReturnType(ctx.db, sym_id, rt) catch { ctx.error_count += 1; };
                     } else if (extractNewCallType(ctx.parser, body)) |rt| {
-                        updateSymbolReturnType(ctx.db, sym_id, rt) catch {};
+                        updateSymbolReturnType(ctx.db, sym_id, rt) catch { ctx.error_count += 1; };
                     }
                 }
             }
@@ -1142,7 +1142,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                             defer upd.finalize();
                             upd.bind_text(1, snippet);
                             upd.bind_int(2, sym_id);
-                            _ = upd.step() catch {};
+                            _ = upd.step() catch { ctx.error_count += 1; };
                         } else |_| {}
                     }
                 }
@@ -1168,7 +1168,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         if (ctx.db.prepare("UPDATE symbols SET kind='class' WHERE id=?")) |upd| {
                             defer upd.finalize();
                             upd.bind_int(1, sym_id);
-                            _ = upd.step() catch {};
+                            _ = upd.step() catch { ctx.error_count += 1; };
                         } else |_| {}
                     }
                     if (call.arguments != null) {
@@ -1180,13 +1180,13 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 if (sym.unescaped.source) |src| {
                                     const sym_name = src[0..sym.unescaped.length];
                                     const alc = locationLineCol(ctx.parser, arg.*.location.start);
-                                    insertSymbol(ctx, "def", sym_name, alc.line, alc.col, null) catch {};
+                                    insertSymbol(ctx, "def", sym_name, alc.line, alc.col, null) catch { ctx.error_count += 1; };
                                     if (is_struct_new) {
                                         const writer_name = ctx.alloc.alloc(u8, sym_name.len + 1) catch continue;
                                         defer ctx.alloc.free(writer_name);
                                         @memcpy(writer_name[0..sym_name.len], sym_name);
                                         writer_name[sym_name.len] = '=';
-                                        insertSymbol(ctx, "def", writer_name, alc.line, alc.col, null) catch {};
+                                        insertSymbol(ctx, "def", writer_name, alc.line, alc.col, null) catch { ctx.error_count += 1; };
                                     }
                                 }
                             }
@@ -1211,22 +1211,22 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             const rn: *const prism.ConstReadNode = @ptrCast(@alignCast(n));
             const lc = locationLineCol(ctx.parser, rn.base.location.start);
             const name = resolveConstant(ctx.parser, rn.name);
-            insertRef(ctx.db, ctx.file_id, name, lc.line, lc.col, null) catch {};
+            insertRef(ctx.db, ctx.file_id, name, lc.line, lc.col, null) catch { ctx.error_count += 1; };
             addSemToken(ctx, lc.line, lc.col, @intCast(name.len), 5);
         },
         prism.NODE_CALL => {
             const cn: *const prism.CallNode = @ptrCast(@alignCast(n));
             const mname = resolveConstant(ctx.parser, cn.name);
             if (cn.receiver == null and std.mem.eql(u8, mname, "rescue_from")) {
-                insertRescueFromHandler(ctx, cn) catch {};
+                insertRescueFromHandler(ctx, cn) catch { ctx.error_count += 1; };
             }
             if (cn.receiver == null and isAttrMethod(mname)) {
-                insertAttrSymbols(ctx, cn, mname) catch {};
+                insertAttrSymbols(ctx, cn, mname) catch { ctx.error_count += 1; };
             }
             if (cn.receiver == null and std.mem.eql(u8, mname, "enum")) {
-                insertEnumSymbols(ctx, cn) catch {};
+                insertEnumSymbols(ctx, cn) catch { ctx.error_count += 1; };
             } else if (cn.receiver == null and isRailsDsl(mname)) {
-                insertRailsDslSymbols(ctx, cn, mname) catch {};
+                insertRailsDslSymbols(ctx, cn, mname) catch { ctx.error_count += 1; };
             }
             if (cn.receiver == null and std.mem.eql(u8, mname, "alias_method")) {
                 if (cn.arguments != null) {
@@ -1237,7 +1237,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                             const sym: *const prism.SymbolNode = @ptrCast(@alignCast(first));
                             if (sym.unescaped.source) |src| {
                                 const lc = locationLineCol(ctx.parser, first.*.location.start);
-                                insertSymbol(ctx, "def", src[0..sym.unescaped.length], lc.line, lc.col, null) catch {};
+                                insertSymbol(ctx, "def", src[0..sym.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                             }
                         }
                     }
@@ -1247,13 +1247,13 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                             const sym2: *const prism.SymbolNode = @ptrCast(@alignCast(second));
                             if (sym2.unescaped.source) |src2| {
                                 const lc2 = locationLineCol(ctx.parser, second.*.location.start);
-                                insertRef(ctx.db, ctx.file_id, src2[0..sym2.unescaped.length], lc2.line, lc2.col, null) catch {};
+                                insertRef(ctx.db, ctx.file_id, src2[0..sym2.unescaped.length], lc2.line, lc2.col, null) catch { ctx.error_count += 1; };
                             }
                         } else if (second.*.type == prism.NODE_STRING) {
                             const sn2: *const prism.StringNode = @ptrCast(@alignCast(second));
                             if (sn2.unescaped.source) |src2| {
                                 const lc2 = locationLineCol(ctx.parser, second.*.location.start);
-                                insertRef(ctx.db, ctx.file_id, src2[0..sn2.unescaped.length], lc2.line, lc2.col, null) catch {};
+                                insertRef(ctx.db, ctx.file_id, src2[0..sn2.unescaped.length], lc2.line, lc2.col, null) catch { ctx.error_count += 1; };
                             }
                         }
                     }
@@ -1266,13 +1266,13 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         const sym: *const prism.SymbolNode = @ptrCast(@alignCast(args.nodes[0]));
                         if (sym.unescaped.source) |src| {
                             const lc = locationLineCol(ctx.parser, args.nodes[0].*.location.start);
-                            insertSymbol(ctx, "def", src[0..sym.unescaped.length], lc.line, lc.col, null) catch {};
+                            insertSymbol(ctx, "def", src[0..sym.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                         }
                     } else if (args.size > 0 and args.nodes[0].*.type == prism.NODE_STRING) {
                         const sn: *const prism.StringNode = @ptrCast(@alignCast(args.nodes[0]));
                         if (sn.unescaped.source) |src| {
                             const lc = locationLineCol(ctx.parser, args.nodes[0].*.location.start);
-                            insertSymbol(ctx, "def", src[0..sn.unescaped.length], lc.line, lc.col, null) catch {};
+                            insertSymbol(ctx, "def", src[0..sn.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                         }
                     }
                 }
@@ -1284,13 +1284,13 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         const sym: *const prism.SymbolNode = @ptrCast(@alignCast(args.nodes[0]));
                         if (sym.unescaped.source) |src| {
                             const lc = locationLineCol(ctx.parser, args.nodes[0].*.location.start);
-                            insertSymbol(ctx, "classdef", src[0..sym.unescaped.length], lc.line, lc.col, null) catch {};
+                            insertSymbol(ctx, "classdef", src[0..sym.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                         }
                     } else if (args.size > 0 and args.nodes[0].*.type == prism.NODE_STRING) {
                         const sn: *const prism.StringNode = @ptrCast(@alignCast(args.nodes[0]));
                         if (sn.unescaped.source) |src| {
                             const lc = locationLineCol(ctx.parser, args.nodes[0].*.location.start);
-                            insertSymbol(ctx, "classdef", src[0..sn.unescaped.length], lc.line, lc.col, null) catch {};
+                            insertSymbol(ctx, "classdef", src[0..sn.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                         }
                     }
                 }
@@ -1304,13 +1304,13 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                             const sym: *const prism.SymbolNode = @ptrCast(@alignCast(arg));
                             if (sym.unescaped.source) |src| {
                                 const lc = locationLineCol(ctx.parser, arg.*.location.start);
-                                insertSymbol(ctx, "classdef", src[0..sym.unescaped.length], lc.line, lc.col, null) catch {};
+                                insertSymbol(ctx, "classdef", src[0..sym.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                                 // Also mark the existing instance def as private
                                 if (ctx.db.prepare("UPDATE symbols SET visibility='private' WHERE file_id=? AND name=? AND kind='def'")) |u| {
                                     defer u.finalize();
                                     u.bind_int(1, ctx.file_id);
                                     u.bind_text(2, src[0..sym.unescaped.length]);
-                                    _ = u.step() catch {};
+                                    _ = u.step() catch { ctx.error_count += 1; };
                                 } else |_| {}
                             }
                         }
@@ -1341,7 +1341,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 upd.bind_text(1, new_vis);
                                 upd.bind_int(2, ctx.file_id);
                                 upd.bind_text(3, method_name);
-                                _ = upd.step() catch {};
+                                _ = upd.step() catch { ctx.error_count += 1; };
                             } else |_| {}
                         }
                     }
@@ -1358,7 +1358,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         if (arg.*.type == prism.NODE_CONSTANT) {
                             const mod_node: *const prism.ConstReadNode = @ptrCast(@alignCast(arg));
                             const mod_name = resolveConstant(ctx.parser, mod_node.name);
-                            insertMixin(ctx.db, ctx.current_class_id.?, mod_name, mname) catch {};
+                            insertMixin(ctx.db, ctx.current_class_id.?, mod_name, mname) catch { ctx.error_count += 1; };
                         } else if (arg.*.type == prism.NODE_CONSTANT_PATH) {
                             const mod_owned = buildQualifiedName(ctx.parser, arg, ctx.alloc) catch null;
                             defer if (mod_owned) |m| ctx.alloc.free(m);
@@ -1366,7 +1366,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 const cp: *const prism.ConstantPathNode = @ptrCast(@alignCast(arg));
                                 break :blk if (cp.name != 0) resolveConstant(ctx.parser, cp.name) else "";
                             };
-                            if (mod_name.len > 0) insertMixin(ctx.db, ctx.current_class_id.?, mod_name, mname) catch {};
+                            if (mod_name.len > 0) insertMixin(ctx.db, ctx.current_class_id.?, mod_name, mname) catch { ctx.error_count += 1; };
                         }
                     }
                 }
@@ -1415,7 +1415,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         if (sn.unescaped.source == null) continue;
                         const dname = sn.unescaped.source[0..sn.unescaped.length];
                         const dlc = locationLineCol(ctx.parser, arg.*.location.start);
-                        insertSymbol(ctx, "def", dname, dlc.line, dlc.col, null) catch {};
+                        insertSymbol(ctx, "def", dname, dlc.line, dlc.col, null) catch { ctx.error_count += 1; };
                     }
                 }
             }
@@ -1434,7 +1434,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         if (sn.unescaped.source == null) continue;
                         const dname = sn.unescaped.source[0..sn.unescaped.length];
                         const dlc = locationLineCol(ctx.parser, arg.*.location.start);
-                        insertSymbol(ctx, "def", dname, dlc.line, dlc.col, null) catch {};
+                        insertSymbol(ctx, "def", dname, dlc.line, dlc.col, null) catch { ctx.error_count += 1; };
                     }
                 }
             }
@@ -1464,7 +1464,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                     if (elem) |e| {
                                         if (cn.block.?.*.type == prism.NODE_BLOCK) {
                                             const block_node: *const prism.BlockNode = @ptrCast(@alignCast(cn.block.?));
-                                            insertBlockParams(ctx, block_node, e, mname, accum_t) catch {};
+                                            insertBlockParams(ctx, block_node, e, mname, accum_t) catch { ctx.error_count += 1; };
                                         }
                                     }
                                 }
@@ -1480,7 +1480,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 const block_generic = cn.block.?;
                                 if (block_generic.*.type == prism.NODE_BLOCK) {
                                     const block_node: *const prism.BlockNode = @ptrCast(@alignCast(block_generic));
-                                    insertBlockParams(ctx, block_node, b, mname, accum_t) catch {};
+                                    insertBlockParams(ctx, block_node, b, mname, accum_t) catch { ctx.error_count += 1; };
                                 }
                             }
                         }
@@ -1497,7 +1497,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 const ivar_type = lv.column_text(0);
                                 if (ivar_type.len > 0 and cn.block.?.*.type == prism.NODE_BLOCK) {
                                     const block_node: *const prism.BlockNode = @ptrCast(@alignCast(cn.block.?));
-                                    insertBlockParams(ctx, block_node, ivar_type, mname, accum_t) catch {};
+                                    insertBlockParams(ctx, block_node, ivar_type, mname, accum_t) catch { ctx.error_count += 1; };
                                 }
                             }
                         } else |_| {}
@@ -1509,14 +1509,14 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 const class_name = resolveConstant(ctx.parser, rc.name);
                                 if (cn.block.?.*.type == prism.NODE_BLOCK) {
                                     const block_node: *const prism.BlockNode = @ptrCast(@alignCast(cn.block.?));
-                                    insertBlockParams(ctx, block_node, class_name, mname, accum_t) catch {};
+                                    insertBlockParams(ctx, block_node, class_name, mname, accum_t) catch { ctx.error_count += 1; };
                                 }
                             }
                         }
                     } else if (inferLiteralType(recv)) |lit_type| {
                         if (cn.block.?.*.type == prism.NODE_BLOCK) {
                             const block_node: *const prism.BlockNode = @ptrCast(@alignCast(cn.block.?));
-                            insertBlockParams(ctx, block_node, lit_type, mname, accum_t) catch {};
+                            insertBlockParams(ctx, block_node, lit_type, mname, accum_t) catch { ctx.error_count += 1; };
                         }
                     }
                 }
@@ -1558,13 +1558,13 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                             var nbuf: [4]u8 = undefined;
                             const nname = std.fmt.bufPrint(&nbuf, "_{d}", .{ni}) catch break;
                             const np_type: ?[]const u8 = if (ni == 1) elem_type_np else null;
-                            insertLocalVar(ctx.db, ctx.file_id, nname, nb_lc.line, nb_lc.col, np_type, 50, ctx.scope_id) catch {};
+                            insertLocalVar(ctx.db, ctx.file_id, nname, nb_lc.line, nb_lc.col, np_type, 50, ctx.scope_id) catch { ctx.error_count += 1; };
                         }
                     }
                 }
             }
             const lc = locationLineCol(ctx.parser, cn.message_loc.start);
-            insertRef(ctx.db, ctx.file_id, mname, lc.line, lc.col, null) catch {};
+            insertRef(ctx.db, ctx.file_id, mname, lc.line, lc.col, null) catch { ctx.error_count += 1; };
         },
         prism.NODE_ALIAS_METHOD => {
             const an: *const prism.AliasMethodNode = @ptrCast(@alignCast(n));
@@ -1572,14 +1572,14 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 const nsym: *const prism.SymbolNode = @ptrCast(@alignCast(an.new_name));
                 if (nsym.unescaped.source) |src| {
                     const lc = locationLineCol(ctx.parser, an.new_name.*.location.start);
-                    insertSymbol(ctx, "def", src[0..nsym.unescaped.length], lc.line, lc.col, null) catch {};
+                    insertSymbol(ctx, "def", src[0..nsym.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                 }
             }
             if (an.old_name.*.type == prism.NODE_SYMBOL) {
                 const osym: *const prism.SymbolNode = @ptrCast(@alignCast(an.old_name));
                 if (osym.unescaped.source) |src| {
                     const lc = locationLineCol(ctx.parser, an.old_name.*.location.start);
-                    insertRef(ctx.db, ctx.file_id, src[0..osym.unescaped.length], lc.line, lc.col, null) catch {};
+                    insertRef(ctx.db, ctx.file_id, src[0..osym.unescaped.length], lc.line, lc.col, null) catch { ctx.error_count += 1; };
                 }
             }
         },
@@ -1595,7 +1595,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             const lv: *const prism.LocalVarReadNode = @ptrCast(@alignCast(n));
             const lc = locationLineCol(ctx.parser, lv.base.location.start);
             const name = resolveConstant(ctx.parser, lv.name);
-            insertRef(ctx.db, ctx.file_id, name, lc.line, lc.col, ctx.scope_id) catch {};
+            insertRef(ctx.db, ctx.file_id, name, lc.line, lc.col, ctx.scope_id) catch { ctx.error_count += 1; };
         },
         prism.NODE_CONSTANT_PATH => {
             const pn: *const prism.ConstantPathNode = @ptrCast(@alignCast(n));
@@ -1607,7 +1607,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             };
             if (ref_name.len > 0) {
                 const lc = locationLineCol(ctx.parser, pn.base.location.start);
-                insertRef(ctx.db, ctx.file_id, ref_name, lc.line, lc.col, null) catch {};
+                insertRef(ctx.db, ctx.file_id, ref_name, lc.line, lc.col, null) catch { ctx.error_count += 1; };
             }
         },
         prism.NODE_CONSTANT_PATH_WRITE => {
@@ -1661,7 +1661,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 if (rs.step() catch false) {
                                     const rt = rs.column_text(0);
                                     if (rt.len > 0) {
-                                        insertLocalVarClassId(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 0, ctx.current_class_id) catch {};
+                                        insertLocalVarClassId(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 0, ctx.current_class_id) catch { ctx.error_count += 1; };
                                         iv_inserted = true;
                                     }
                                 }
@@ -1670,7 +1670,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                     }
                 }
             }
-            if (!iv_inserted) insertLocalVarClassId(ctx.db, ctx.file_id, name, lc.line, lc.col, type_hint, 0, ctx.current_class_id) catch {};
+            if (!iv_inserted) insertLocalVarClassId(ctx.db, ctx.file_id, name, lc.line, lc.col, type_hint, 0, ctx.current_class_id) catch { ctx.error_count += 1; };
         },
         prism.NODE_INSTANCE_VAR_OR_WRITE,
         prism.NODE_INSTANCE_VAR_AND_WRITE => {
@@ -1680,21 +1680,21 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             const rtype = if (iv.value != null)
                 inferLiteralType(iv.value.?) orelse extractNewCallType(ctx.parser, iv.value.?)
             else null;
-            insertLocalVarClassId(ctx.db, ctx.file_id, name, lc.line, lc.col, rtype, 0, ctx.current_class_id) catch {};
+            insertLocalVarClassId(ctx.db, ctx.file_id, name, lc.line, lc.col, rtype, 0, ctx.current_class_id) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
         prism.NODE_CLASS_VAR_WRITE => {
             const cvw: *const prism.ClassVarWriteNode = @ptrCast(@alignCast(n));
             const lc = locationLineCol(ctx.parser, cvw.name_loc.start);
             const name = resolveConstant(ctx.parser, cvw.name);
-            insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, null, 0, null) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, null, 0, null) catch { ctx.error_count += 1; };
         },
         prism.NODE_CLASS_VAR_OR_WRITE,
         prism.NODE_CLASS_VAR_AND_WRITE => {
             const cvw: *const prism.ClassVarOrWriteNode = @ptrCast(@alignCast(n));
             const lc = locationLineCol(ctx.parser, cvw.name_loc.start);
             const name = resolveConstant(ctx.parser, cvw.name);
-            insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, null, 0, null) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, null, 0, null) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
         prism.NODE_LOCAL_VAR_WRITE => {
@@ -1885,7 +1885,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                         if (ss.step() catch false) {
                                             const rt = ss.column_text(0);
                                             if (rt.len > 0) {
-                                                insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 75, ctx.scope_id) catch {};
+                                                insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 75, ctx.scope_id) catch { ctx.error_count += 1; };
                                                 inserted = true;
                                             }
                                         }
@@ -1930,14 +1930,14 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                                 if (cs.step() catch false) {
                                                     const rt = cs.column_text(0);
                                                     if (rt.len > 0) {
-                                                        insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 55, ctx.scope_id) catch {};
+                                                        insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 55, ctx.scope_id) catch { ctx.error_count += 1; };
                                                         inserted = true;
                                                     }
                                                 }
                                             } else |_| {}
                                             if (!inserted) {
                                                 if (lookupStdlibReturn(recv_type, called)) |stdlib_rt| {
-                                                    insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, stdlib_rt, 55, ctx.scope_id) catch {};
+                                                    insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, stdlib_rt, 55, ctx.scope_id) catch { ctx.error_count += 1; };
                                                     inserted = true;
                                                 }
                                             }
@@ -2093,7 +2093,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         4 => 25,
                         else => 20,
                     };
-                    insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, lt, confidence, ctx.scope_id) catch {};
+                    insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, lt, confidence, ctx.scope_id) catch { ctx.error_count += 1; };
                     inserted = true;
                 }
             }
@@ -2130,7 +2130,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 if (recv_type) |rt| {
                     const result_type = inferBlockReturnType(mname_br, rt);
                     if (result_type) |brt| {
-                        insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, brt, 50, ctx.scope_id) catch {};
+                        insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, brt, 50, ctx.scope_id) catch { ctx.error_count += 1; };
                         inserted = true;
                     }
                 }
@@ -2151,7 +2151,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                                 if (rs.step() catch false) {
                                     const rt = rs.column_text(0);
                                     if (rt.len > 0) {
-                                        insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 0, ctx.scope_id) catch {};
+                                        insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, rt, 0, ctx.scope_id) catch { ctx.error_count += 1; };
                                         inserted = true;
                                     }
                                 }
@@ -2161,7 +2161,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 }
             }
 
-            if (!inserted) insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, type_hint, 0, ctx.scope_id) catch {};
+            if (!inserted) insertLocalVar(ctx.db, ctx.file_id, name, lc.line, lc.col, type_hint, 0, ctx.scope_id) catch { ctx.error_count += 1; };
             if (lv.value) |val| {
                 if (val.*.type == prism.NODE_LAMBDA) {
                     const lam: *const prism.LambdaNode = @ptrCast(@alignCast(val));
@@ -2182,7 +2182,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         if (param_node.*.type == prism.NODE_BLOCK_PARAMETERS) {
                             const bp: *const prism.BlockParametersNode = @ptrCast(@alignCast(lam.parameters.?));
                             if (bp.parameters != null) {
-                                extractParams(ctx, sym_id, bp.parameters.?) catch {};
+                                extractParams(ctx, sym_id, bp.parameters.?) catch { ctx.error_count += 1; };
                             }
                         }
                     }
@@ -2202,7 +2202,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                     if (std.mem.eql(u8, lname, "_")) continue;
                     const llc = locationLineCol(ctx.parser, left.*.location.start);
                     const rtype = extractNewCallType(ctx.parser, arr.elements.nodes[i]);
-                    insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 0, ctx.scope_id) catch {};
+                    insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 0, ctx.scope_id) catch { ctx.error_count += 1; };
                 }
             } else if (mw.lefts.size == 1 and mw.value != null) {
                 const left = mw.lefts.nodes[0];
@@ -2211,7 +2211,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                     const lname = resolveConstant(ctx.parser, lt.name);
                     const llc = locationLineCol(ctx.parser, left.*.location.start);
                     const rtype = extractNewCallType(ctx.parser, mw.value.?);
-                    insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 0, ctx.scope_id) catch {};
+                    insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 0, ctx.scope_id) catch { ctx.error_count += 1; };
                 }
             }
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
@@ -2224,7 +2224,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 const llc = locationLineCol(ctx.parser, fn_node.index.*.location.start);
                 const coll_type = extractNewCallType(ctx.parser, fn_node.collection);
                 const elem_type = stripArrayBrackets(coll_type);
-                insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, elem_type, 50, ctx.scope_id) catch {};
+                insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, elem_type, 50, ctx.scope_id) catch { ctx.error_count += 1; };
             }
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
@@ -2242,7 +2242,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                         exc_type = resolveConstant(ctx.parser, cn.name);
                     }
                 }
-                insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, exc_type, 80, ctx.scope_id) catch {};
+                insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, exc_type, 80, ctx.scope_id) catch { ctx.error_count += 1; };
             }
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
@@ -2254,7 +2254,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             const lname = resolveConstant(ctx.parser, lw.name);
             const llc = locationLineCol(ctx.parser, lw.name_loc.start);
             const rtype = if (lw.value) |val| inferLiteralType(val) orelse extractNewCallType(ctx.parser, val) else null;
-            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 20, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 20, ctx.scope_id) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
         prism.NODE_LOCAL_VAR_AND_WRITE => {
@@ -2262,14 +2262,14 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             const lname = resolveConstant(ctx.parser, lw.name);
             const llc = locationLineCol(ctx.parser, lw.name_loc.start);
             const rtype = if (lw.value) |val| inferLiteralType(val) orelse extractNewCallType(ctx.parser, val) else null;
-            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 15, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, rtype, 15, ctx.scope_id) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
         prism.NODE_LOCAL_VAR_OP_WRITE => {
             const lw: *const prism.LocalVarOpWriteNode = @ptrCast(@alignCast(n));
             const lname = resolveConstant(ctx.parser, lw.name);
             const llc = locationLineCol(ctx.parser, lw.name_loc.start);
-            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, null, 20, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, null, 20, ctx.scope_id) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
         prism.NODE_CASE_MATCH => {
@@ -2289,7 +2289,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 const cpv: *const prism.ConstantPathNode = @ptrCast(@alignCast(cp.value));
                 if (cpv.name != 0) pat_type = resolveConstant(ctx.parser, cpv.name);
             }
-            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, pat_type, 85, ctx.scope_id) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, lname, llc.line, llc.col, pat_type, 85, ctx.scope_id) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
             return false;
         },
@@ -2299,7 +2299,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             if (unless_node.predicate) |cond| {
                 if (detectNilGuard(ctx.parser, cond)) |var_name| {
                     const guard_lc = locationLineCol(ctx.parser, cond.*.location.start);
-                    insertLocalVar(ctx.db, ctx.file_id, var_name, guard_lc.line, guard_lc.col, "Object", 80, ctx.scope_id) catch {};
+                    insertLocalVar(ctx.db, ctx.file_id, var_name, guard_lc.line, guard_lc.col, "Object", 80, ctx.scope_id) catch { ctx.error_count += 1; };
                 }
             }
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
@@ -2328,7 +2328,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
                 break :blk inferLiteralType(gv.value.?)
                     orelse extractNewCallType(ctx.parser, gv.value.?);
             } else null;
-            insertLocalVar(ctx.db, ctx.file_id, gname, glc.line, glc.col, gval_type, 70, null) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, gname, glc.line, glc.col, gval_type, 70, null) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
             return false;
         },
@@ -2337,7 +2337,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             const gv: *const prism.GlobalVarOrWriteNode = @ptrCast(@alignCast(n));
             const gname = resolveConstant(ctx.parser, gv.name);
             const glc = locationLineCol(ctx.parser, gv.name_loc.start);
-            insertLocalVar(ctx.db, ctx.file_id, gname, glc.line, glc.col, null, 70, null) catch {};
+            insertLocalVar(ctx.db, ctx.file_id, gname, glc.line, glc.col, null, 70, null) catch { ctx.error_count += 1; };
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
         },
         prism.NODE_IF => {
@@ -2345,7 +2345,7 @@ fn visitor(node: ?*const prism.Node, data: ?*anyopaque) callconv(.c) bool {
             if (if_node.predicate) |cond| {
                 if (detectTypeGuard(ctx.parser, cond)) |guard| {
                     const guard_lc = locationLineCol(ctx.parser, cond.*.location.start);
-                    insertLocalVar(ctx.db, ctx.file_id, guard.name, guard_lc.line, guard_lc.col, guard.narrowed_type, 85, ctx.scope_id) catch {};
+                    insertLocalVar(ctx.db, ctx.file_id, guard.name, guard_lc.line, guard_lc.col, guard.narrowed_type, 85, ctx.scope_id) catch { ctx.error_count += 1; };
                 }
             }
             prism.visit_child_nodes(n, visitor, @ptrCast(ctx));
