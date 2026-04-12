@@ -145,9 +145,15 @@ const TOOLS = [_]ToolEntry{
     .{ .name = "search_symbols", .description = "Alias for workspace_symbols — search symbols across the entire workspace by name", .schema = schema_workspace_symbols },
 };
 
+const MAX_REQUESTS_PER_SEC: u32 = 100;
+pub const MAX_RESPONSE_BYTES: usize = 1_048_576; // 1 MiB
+pub const MAX_LINE_BODY_BYTES: usize = 512; // per-line cap for grep_source match/context
+
 pub const Server = struct {
     db: db_mod.Db,
     alloc: std.mem.Allocator,
+    request_count: u32 = 0,
+    request_window_ms: i64 = 0,
 
     pub fn init(db: db_mod.Db, alloc: std.mem.Allocator) Server {
         return .{ .db = db, .alloc = alloc };
@@ -178,15 +184,44 @@ pub const Server = struct {
             const id = obj.get("id");
             const params = obj.get("params");
 
+            const now_ms = std.time.milliTimestamp();
+            if (now_ms - self.request_window_ms > 1000) {
+                self.request_count = 0;
+                self.request_window_ms = now_ms;
+            }
+            self.request_count += 1;
+            if (self.request_count > MAX_REQUESTS_PER_SEC) {
+                if (id != null) {
+                    const rl_resp = self.buildError(id, -32600, "rate limit exceeded") catch null;
+                    if (rl_resp) |resp| {
+                        defer self.alloc.free(resp);
+                        writer.writeAll(resp) catch break;
+                        writer.writeByte('\n') catch break;
+                        writer.flush() catch break;
+                    }
+                }
+                continue;
+            }
+
             const resp_opt = self.dispatch(method, id, params) catch |e| blk: {
                 if (id == null) break :blk null;
                 break :blk self.buildError(id, -32603, @errorName(e)) catch null;
             };
             if (resp_opt) |resp| {
                 defer self.alloc.free(resp);
-                writer.writeAll(resp) catch break;
-                writer.writeByte('\n') catch break;
-                writer.flush() catch break;
+                if (resp.len > MAX_RESPONSE_BYTES) {
+                    const too_big = self.buildError(id, -32000, "response too large — narrow the query or use pagination (offset)") catch null;
+                    if (too_big) |tb| {
+                        defer self.alloc.free(tb);
+                        writer.writeAll(tb) catch break;
+                        writer.writeByte('\n') catch break;
+                        writer.flush() catch break;
+                    }
+                } else {
+                    writer.writeAll(resp) catch break;
+                    writer.writeByte('\n') catch break;
+                    writer.flush() catch break;
+                }
             }
         }
     }
@@ -1532,7 +1567,7 @@ pub const Server = struct {
                 try rw.writeAll("{\"file\":");
                 try writeJsonStr(rw, fpath);
                 try rw.print(",\"line\":{d},\"match\":", .{li + 1});
-                try writeJsonStr(rw, line);
+                try writeJsonStrCapped(rw, line, MAX_LINE_BODY_BYTES);
                 try rw.writeAll(",\"context_before\":[");
                 const before_start: usize = if (li >= ctx_n) li - ctx_n else 0;
                 var first_b = true;
@@ -1540,7 +1575,7 @@ pub const Server = struct {
                 while (bi < li) : (bi += 1) {
                     if (!first_b) try rw.writeByte(',');
                     first_b = false;
-                    try writeJsonStr(rw, lines.items[bi]);
+                    try writeJsonStrCapped(rw, lines.items[bi], MAX_LINE_BODY_BYTES);
                 }
                 try rw.writeAll("],\"context_after\":[");
                 const after_end = @min(li + ctx_n + 1, lines.items.len);
@@ -1549,7 +1584,7 @@ pub const Server = struct {
                 while (ai < after_end) : (ai += 1) {
                     if (!first_a) try rw.writeByte(',');
                     first_a = false;
-                    try writeJsonStr(rw, lines.items[ai]);
+                    try writeJsonStrCapped(rw, lines.items[ai], MAX_LINE_BODY_BYTES);
                 }
                 try rw.writeAll("]}");
             }
@@ -2780,6 +2815,8 @@ pub const Server = struct {
             defer stmt.finalize();
 
             var first = true;
+            var result_count: u32 = 0;
+            const max_results: u32 = 500;
             while (stmt.step() catch |e| stepLog(e)) {
                 const line = stmt.column_int(0);
                 const col = stmt.column_int(1);
@@ -2804,6 +2841,8 @@ pub const Server = struct {
                     if (!std.mem.eql(u8, code, cf)) continue;
                 }
 
+                if (result_count >= max_results) break;
+
                 if (!first) try w.writeByte(',');
                 first = false;
                 try w.print("{{\"file\":", .{});
@@ -2813,6 +2852,7 @@ pub const Server = struct {
                 try w.writeAll(",\"code\":");
                 if (code.len > 0) try writeJsonStr(w, code) else try w.writeAll("null");
                 try w.writeAll("}");
+                result_count += 1;
             }
         } else |_| {}
 
@@ -3074,6 +3114,17 @@ fn countLines(source: []const u8) u32 {
 fn writeJsonStr(w: *std.Io.Writer, s: []const u8) !void {
     try w.writeByte('"');
     try writeJsonEscaped(w, s);
+    try w.writeByte('"');
+}
+
+fn writeJsonStrCapped(w: *std.Io.Writer, s: []const u8, max_bytes: usize) !void {
+    try w.writeByte('"');
+    if (s.len <= max_bytes) {
+        try writeJsonEscaped(w, s);
+    } else {
+        try writeJsonEscaped(w, s[0..max_bytes]);
+        try w.writeAll("\\u2026");
+    }
     try w.writeByte('"');
 }
 
