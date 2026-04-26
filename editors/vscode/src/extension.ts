@@ -104,6 +104,12 @@ export async function activate(context: ExtensionContext) {
       }
     });
 
+    // Route window/logMessage to the Refract output channel (used by runTest streaming)
+    client.onNotification("window/logMessage", (params: { type: number; message: string }) => {
+      getOutputChannel().appendLine(params.message);
+      if (params.type === 4) getOutputChannel().show(true);
+    });
+
     // Commands advertised by the server's executeCommandProvider
     const serverCommands: Array<[string, string]> = [
       ["refract.recheckRubocop",  "refract.recheckRubocop"],
