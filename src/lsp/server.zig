@@ -508,11 +508,6 @@ const BgCtx = struct {
             };
             indexer.ensureBundledRbs(db);
             self.server_ptr.db_mutex.unlock(std.Options.debug_io);
-            self.server_ptr.deleted_paths_mu.lockUncancelable(std.Options.debug_io);
-            var dp_it = self.server_ptr.deleted_paths.keyIterator();
-            while (dp_it.next()) |k| self.server_ptr.alloc.free(k.*);
-            self.server_ptr.deleted_paths.clearRetainingCapacity();
-            self.server_ptr.deleted_paths_mu.unlock(std.Options.debug_io);
         }
 
         self.server_ptr.sendProgressEnd();
