@@ -331,6 +331,9 @@ pub const Db = struct {
         // Migration guards for scope-aware rename (Phase 7)
         self.execMigration("ALTER TABLE local_vars ADD COLUMN scope_id INTEGER DEFAULT NULL");
         self.execMigration("ALTER TABLE refs ADD COLUMN scope_id INTEGER DEFAULT NULL");
+        // Type-checker columns: call sites only — non-call refs leave these defaulted.
+        self.execMigration("ALTER TABLE refs ADD COLUMN arg_count INTEGER DEFAULT 0");
+        self.execMigration("ALTER TABLE refs ADD COLUMN receiver_type TEXT");
         // Mixins table for include/prepend/extend tracking
         try self.exec(
             \\CREATE TABLE IF NOT EXISTS mixins (
